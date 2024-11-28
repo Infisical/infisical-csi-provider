@@ -1,6 +1,6 @@
 # Infisical Provider for Secrets Store CSI Driver
 
-Infisical provider for the [Secrets Store CSI driver](https://github.com/kubernetes-sigs/secrets-store-csi-driver) will allow you to mount Infisical secrets directly into Kubernetes pods.
+Infisical provider for the [Secrets Store CSI driver](https://github.com/kubernetes-sigs/secrets-store-csi-driver) will allow you to mount Infisical secrets directly into your Kubernetes pods while maintaining secret-zero in your Kubernetes cluster.
 
 ## Installation
 
@@ -8,6 +8,7 @@ Infisical provider for the [Secrets Store CSI driver](https://github.com/kuberne
 
 * Kubernetes version >= 1.20.0
 * [Secrets store CSI driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/installation.html) installed
+* Kubernetes service account configured for [native authentication](https://infisical.com/docs/documentation/platform/identities/kubernetes-auth)
 
 ### Using helm (Recommended)
 ```bash
