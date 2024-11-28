@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/infisical/infisical-csi-provider/internal/server"
+	"github.com/infisical/infisical-csi-provider/internal/version"
 	"google.golang.org/grpc"
 	pb "sigs.k8s.io/secrets-store-csi-driver/provider/v1alpha1"
 )
@@ -96,7 +97,7 @@ func startProviderServer() chan error {
 	)
 
 	errorCh := make(chan error)
-	log.Println("Starting up provider server...")
+	log.Printf("Starting up provider server with build version: %s\n", version.BuildVersion)
 	go func() {
 		defer func() {
 			shutdown(gs)
