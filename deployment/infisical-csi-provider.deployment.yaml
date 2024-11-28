@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: infisical-csi-provider
+  name: infisical-csi-provider
+  namespace: kube-system
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: infisical-csi-provider
+  template:
+    metadata:
+      labels:
+        app: infisical-csi-provider
+    spec:
+      tolerations:
+      containers:
+        - name: infisical-csi-provider
+          image: infisical-csi-provider:latest
+          imagePullPolicy: Never
+          args:
+            - -endpoint=/provider/infisical.sock
+          resources:
+            requests:
+              cpu: 50m
+              memory: 100Mi
+            limits:
+              cpu: 50m
+              memory: 100Mi
+          volumeMounts:
+            - name: providervol
+              mountPath: "/provider"
+          livenessProbe:
+            httpGet:
+              path: "/health/ready"
+              port: 8080
+              scheme: "HTTP"
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: "/health/ready"
+              port: 8080
+              scheme: "HTTP"
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+      volumes:
+        - name: providervol
+          hostPath:
+            path: "/etc/kubernetes/secrets-store-csi-providers"
+      nodeSelector:
+        kubernetes.io/os: linux

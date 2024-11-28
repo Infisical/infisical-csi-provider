@@ -6,6 +6,7 @@ import (
 
 	"github.com/infisical/infisical-csi-provider/internal/config"
 	"github.com/infisical/infisical-csi-provider/internal/provider"
+	"github.com/infisical/infisical-csi-provider/internal/version"
 	pb "sigs.k8s.io/secrets-store-csi-driver/provider/v1alpha1"
 )
 
@@ -18,10 +19,9 @@ type Server struct {
 
 func (s *Server) Version(context.Context, *pb.VersionRequest) (*pb.VersionResponse, error) {
 	return &pb.VersionResponse{
-		Version:     "v1alpha1",
-		RuntimeName: "infisical-csi-provider",
-		// TODO: set dynamically in the build process
-		RuntimeVersion: "v0.0.1",
+		Version:        "v1alpha1",
+		RuntimeName:    "infisical-csi-provider",
+		RuntimeVersion: version.BuildVersion,
 	}, nil
 }
 

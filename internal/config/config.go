@@ -49,10 +49,10 @@ func parseParameters(parametersStr string) (Parameters, error) {
 	}
 
 	var parameters Parameters
-	parameters.Audience = params["audience"]
 
+	parameters.Audience = params["audience"]
 	if parameters.Audience == "" {
-		return Parameters{}, fmt.Errorf("audience field cannot be empty")
+		parameters.Audience = "infisical"
 	}
 
 	parameters.InfisicalUrl = params["infisicalUrl"]
@@ -83,12 +83,11 @@ func parseParameters(parametersStr string) (Parameters, error) {
 		}
 	}
 
-	// TODO: confirm if we need to handle generation of token
 	if parameters.PodInfo.ServiceAccountToken == "" {
 		return Parameters{}, fmt.Errorf("no service account token received")
 	}
 
-	secretsYaml := params["objects"]
+	secretsYaml := params["secrets"]
 	if secretsYaml != "" {
 		err = yaml.Unmarshal([]byte(secretsYaml), &parameters.Secrets)
 		if err != nil {
@@ -115,5 +114,38 @@ func Parse(parametersStr string, targetPath string, permissionStr string, hostUr
 		return Config{}, err
 	}
 
+	if config.Parameters.InfisicalUrl != "" {
+		config.HostUrl = config.Parameters.InfisicalUrl
+	}
+
+	err = config.Validate()
+	if err != nil {
+		return Config{}, err
+	}
+
 	return config, nil
+}
+
+func (cfg *Config) Validate() error {
+	if cfg.HostUrl == "" {
+		return fmt.Errorf("infisical url must be defined")
+	}
+
+	if cfg.Parameters.IdentityId == "" {
+		return fmt.Errorf("identity id must be defined")
+	}
+
+	if cfg.Parameters.ProjectId == "" {
+		return fmt.Errorf("project id must be defined")
+	}
+
+	if cfg.Parameters.EnvSlug == "" {
+		return fmt.Errorf("env slug must be defined")
+	}
+
+	if len(cfg.Parameters.Secrets) == 0 {
+		return fmt.Errorf("must have at least one secret")
+	}
+
+	return nil
 }

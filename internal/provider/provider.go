@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"time"
 
 	infisical "github.com/infisical/go-sdk"
 	"github.com/infisical/infisical-csi-provider/internal/config"
@@ -20,10 +19,9 @@ func NewProvider() *Provider {
 }
 
 type secretItem struct {
-	EntryTime time.Time
-	FileName  string
-	Value     string
-	Version   string
+	FileName string
+	Value    string
+	Version  string
 }
 
 func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*pb.MountResponse, error) {
@@ -32,9 +30,9 @@ func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*
 		infisicalUrl = cfg.HostUrl
 	}
 
-	infisicalClient := infisical.NewInfisicalClient(context.Background(), infisical.Config{
+	infisicalClient := infisical.NewInfisicalClient(ctx, infisical.Config{
 		SiteUrl:       infisicalUrl,
-		CaCertificate: cfg.Parameters.Audience,
+		CaCertificate: cfg.Parameters.CaCertificate,
 	})
 
 	_, err := infisicalClient.Auth().KubernetesRawServiceAccountTokenLogin(cfg.Parameters.IdentityId, cfg.Parameters.PodInfo.ServiceAccountToken)
@@ -57,10 +55,9 @@ func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*
 		}
 
 		secretMap[sec.ID] = &secretItem{
-			FileName:  secret.FileName,
-			Value:     sec.SecretValue,
-			EntryTime: time.Now(),
-			Version:   sec.ID + sec.SecretPath + sec.SecretKey + strconv.Itoa(sec.Version),
+			FileName: secret.FileName,
+			Value:    sec.SecretValue,
+			Version:  fmt.Sprintf("%s-%s-%s-%s", sec.ID, sec.SecretPath, sec.SecretKey, strconv.Itoa(sec.Version)),
 		}
 	}
 

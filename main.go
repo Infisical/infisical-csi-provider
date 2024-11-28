@@ -21,7 +21,7 @@ import (
 var (
 	hostUrl    = flag.String("host-url", "https://app.infisical.com", "infisical instance URL")
 	endpoint   = flag.String("endpoint", "/tmp/infisical.socket", "Path to socket on which to listen for driver gRPC calls.")
-	healthPort = flag.String("health-port", "8081", "Port for HTTP health check.")
+	healthPort = flag.String("health-port", "8080", "Port for HTTP health check.")
 )
 
 // ListenAndServe accepts incoming connections on a Unix socket. It is a blocking method.
@@ -61,7 +61,7 @@ func shutdown(gs *grpc.Server) {
 func startHealthCheck() chan error {
 	mux := http.NewServeMux()
 	ms := http.Server{
-		Addr:    *healthPort,
+		Addr:    fmt.Sprintf(":%s", *healthPort),
 		Handler: mux,
 	}
 
@@ -73,14 +73,14 @@ func startHealthCheck() chan error {
 
 	log.Printf("Initializing health check %+v", *healthPort)
 
-	defer func() {
-		err := ms.Shutdown(context.Background())
-		if err != nil {
-			log.Printf("error shutting down health handler: %+v", err)
-		}
-	}()
-
 	go func() {
+		defer func() {
+			err := ms.Shutdown(context.Background())
+			if err != nil {
+				log.Printf("error shutting down health handler: %+v", err)
+			}
+		}()
+
 		select {
 		case errorCh <- ms.ListenAndServe():
 		default:
