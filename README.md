@@ -7,8 +7,8 @@ Infisical provider for the [Secrets Store CSI driver](https://github.com/kuberne
 ### Prerequisites
 
 * Kubernetes version >= 1.20.0
-* [Secrets store CSI driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/installation.html) installed
-* Kubernetes service account configured for [native authentication](https://infisical.com/docs/documentation/platform/identities/kubernetes-auth)
+* [Secrets store CSI driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/installation.html) installed with `tokenRequests` audience configured
+* Kubernetes service account configured for [native authentication](https://infisical.com/docs/documentation/platform/identities/kubernetes-auth) with Infisical
 
 ### Using helm (Recommended)
 ```bash
@@ -38,7 +38,7 @@ To troubleshoot issues with the Infisical CSI provider, refer to the logs of the
   kubectl logs infisical-csi-provider-7x44t
   ```
 
-You can also refer to the logs of the secrets store CSI driver. Modify the command below to include the appropriate pod and namespace of your secrets store CSI driver installation.
+You can also refer to the logs of the secrets store CSI driver. Modify the command below with the appropriate pod and namespace of your secrets store CSI driver installation.
 
   ```bash
   kubectl logs csi-secrets-store-csi-driver-7h4jp -n=kube-system
