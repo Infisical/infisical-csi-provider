@@ -26,6 +26,7 @@ type PodInfo struct {
 
 type Parameters struct {
 	Audience      string
+	AuthMethod    string
 	InfisicalUrl  string
 	Secrets       []Secret
 	PodInfo       PodInfo
@@ -49,6 +50,13 @@ func parseParameters(parametersStr string) (Parameters, error) {
 	}
 
 	var parameters Parameters
+
+	parameters.AuthMethod = params["authMethod"]
+
+	// for now, only kubernetes auth is supported
+	if parameters.AuthMethod != "kubernetes" {
+		return Parameters{}, fmt.Errorf("invalid value for auth method - valid option is kubernetes")
+	}
 
 	parameters.Audience = params["audience"]
 	if parameters.Audience == "" {
