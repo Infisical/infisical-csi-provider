@@ -20,7 +20,7 @@ spec:
       containers:
         - name: infisical-csi-provider
           image: infisical-csi-provider:latest
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           args:
             - -endpoint=/provider/infisical.sock
           resources:
