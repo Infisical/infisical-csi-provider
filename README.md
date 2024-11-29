@@ -6,7 +6,7 @@ Infisical provider for the [Secrets Store CSI driver](https://github.com/kuberne
 
 ### Prerequisites
 
-* Kubernetes version >= 1.20.0
+* Kubernetes version >= 1.20
 * [Secrets store CSI driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/installation.html) installed with `tokenRequests` audience configured
 * Kubernetes service account configured for [native authentication](https://infisical.com/docs/documentation/platform/identities/kubernetes-auth) with Infisical
 
