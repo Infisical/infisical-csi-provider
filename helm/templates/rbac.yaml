@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.name | default "infisical-csi-provider" }}
+  namespace: {{ .Values.namespace | default "kube-system" }}
+  labels:
+    app: {{ .Values.name | default "infisical-csi-provider" }}
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.name | default "infisical-csi-provider" }}
+  labels:
+    app: {{ .Values.name | default "infisical-csi-provider" }}
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.name | default "infisical-csi-provider" }}
+  labels:
+    app: {{ .Values.name | default "infisical-csi-provider" }}
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.name | default "infisical-csi-provider" }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.name | default "infisical-csi-provider" }}
+  namespace: {{ .Values.namespace | default "kube-system" }} 

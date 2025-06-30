@@ -26,7 +26,7 @@ func (s *Server) Version(context.Context, *pb.VersionRequest) (*pb.VersionRespon
 }
 
 func (s *Server) Mount(ctx context.Context, req *pb.MountRequest) (*pb.MountResponse, error) {
-	cfg, err := config.Parse(req.Attributes, req.TargetPath, req.Permission, s.HostUrl)
+	cfg, err := config.Parse(ctx, req.Attributes, req.TargetPath, req.Permission, s.HostUrl)
 	if err != nil {
 		return nil, err
 	}

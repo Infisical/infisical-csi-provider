@@ -11,10 +11,11 @@ spec:
       secretName: foosecret
       type: Opaque
   parameters:
-    infisicalUrl: "https://e98fceb9cbd2.ngrok.app"
+    infisicalUrl: "https://117aa93c00fe.ngrok.app"
     authMethod: "kubernetes"
     identityId: "ad2f8c67-cbe2-417a-b5eb-1339776ec0b3"
     projectId: "09eda1f8-85a3-47a9-8a6f-e27f133b2a36"
+    useDefaultAudience: "true"
     envSlug: "dev"
     secrets: |
       - secretPath: "/engineering"
@@ -31,7 +32,7 @@ metadata:
 spec:
   provider: infisical
   parameters:
-    infisicalUrl: "https://e98fceb9cbd2.ngrok.app"
+    infisicalUrl: "https://117aa93c00fe.ngrok.app"
     authMethod: "kubernetes"
     identityId: "ad2f8c67-cbe2-417a-b5eb-1339776ec0b3"
     projectId: "09eda1f8-85a3-47a9-8a6f-e27f133b2a36"

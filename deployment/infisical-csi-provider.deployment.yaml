@@ -16,6 +16,7 @@ spec:
       labels:
         app: infisical-csi-provider
     spec:
+      serviceAccountName: infisical-csi-provider
       tolerations:
       containers:
         - name: infisical-csi-provider

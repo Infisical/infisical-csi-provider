@@ -1,12 +1,18 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v2"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type Config struct {
@@ -25,15 +31,16 @@ type PodInfo struct {
 }
 
 type Parameters struct {
-	Audience      string
-	AuthMethod    string
-	InfisicalUrl  string
-	Secrets       []Secret
-	PodInfo       PodInfo
-	CaCertificate string
-	IdentityId    string
-	ProjectId     string
-	EnvSlug       string
+	Audience           string
+	UseDefaultAudience bool
+	AuthMethod         string
+	InfisicalUrl       string
+	Secrets            []Secret
+	PodInfo            PodInfo
+	CaCertificate      string
+	IdentityId         string
+	ProjectId          string
+	EnvSlug            string
 }
 
 type Secret struct {
@@ -42,7 +49,40 @@ type Secret struct {
 	SecretKey  string `yaml:"secretKey"`
 }
 
-func parseParameters(parametersStr string) (Parameters, error) {
+func createJWTTokenWithDefaultAudience(ctx context.Context, parameters Parameters) (string, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return "", fmt.Errorf("failed to create in-cluster config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	podInfo := parameters.PodInfo
+	ttl := int64((15 * time.Minute).Seconds())
+
+	resp, err := clientset.CoreV1().ServiceAccounts(podInfo.Namespace).CreateToken(ctx, podInfo.ServiceAccountName, &authenticationv1.TokenRequest{
+		Spec: authenticationv1.TokenRequestSpec{
+			ExpirationSeconds: &ttl,
+			BoundObjectRef: &authenticationv1.BoundObjectReference{
+				Kind:       "Pod",
+				APIVersion: "v1",
+				Name:       podInfo.Name,
+				UID:        podInfo.UID,
+			},
+		},
+	}, metav1.CreateOptions{})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create a service account token for requesting pod %v: %w", podInfo, err)
+	}
+
+	return resp.Status.Token, nil
+}
+
+func parseParameters(ctx context.Context, parametersStr string) (Parameters, error) {
 	var params map[string]string
 	err := json.Unmarshal([]byte(parametersStr), &params)
 	if err != nil {
@@ -63,6 +103,8 @@ func parseParameters(parametersStr string) (Parameters, error) {
 		parameters.Audience = "infisical"
 	}
 
+	parameters.UseDefaultAudience = params["useDefaultAudience"] == "true"
+
 	parameters.InfisicalUrl = params["infisicalUrl"]
 	parameters.CaCertificate = params["caCertificate"]
 	parameters.IdentityId = params["identityId"]
@@ -75,7 +117,7 @@ func parseParameters(parametersStr string) (Parameters, error) {
 	parameters.PodInfo.ServiceAccountName = params["csi.storage.k8s.io/serviceAccount.name"]
 
 	tokensJSON := params["csi.storage.k8s.io/serviceAccount.tokens"]
-	if tokensJSON != "" {
+	if tokensJSON != "" && !parameters.UseDefaultAudience {
 		// The csi.storage.k8s.io/serviceAccount.tokens field is a JSON object
 		// marshalled into a string. The object keys are audience name (string)
 		// and the values are embedded objects with "token" property
@@ -88,6 +130,13 @@ func parseParameters(parametersStr string) (Parameters, error) {
 
 		if token, ok := tokens[parameters.Audience]; ok {
 			parameters.PodInfo.ServiceAccountToken = token.Token
+		}
+	}
+
+	if parameters.UseDefaultAudience {
+		parameters.PodInfo.ServiceAccountToken, err = createJWTTokenWithDefaultAudience(ctx, parameters)
+		if err != nil {
+			return Parameters{}, err
 		}
 	}
 
@@ -106,14 +155,14 @@ func parseParameters(parametersStr string) (Parameters, error) {
 	return parameters, nil
 }
 
-func Parse(parametersStr string, targetPath string, permissionStr string, hostUrl string) (Config, error) {
+func Parse(ctx context.Context, parametersStr string, targetPath string, permissionStr string, hostUrl string) (Config, error) {
 	config := Config{
 		TargetPath: targetPath,
 		HostUrl:    hostUrl,
 	}
 
 	var err error
-	config.Parameters, err = parseParameters(parametersStr)
+	config.Parameters, err = parseParameters(ctx, parametersStr)
 	if err != nil {
 		return Config{}, err
 	}
