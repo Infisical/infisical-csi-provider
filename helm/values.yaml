@@ -6,7 +6,7 @@ namespace: kube-system
 # Container image configuration
 image:
   repository: infisical/infisical-csi-provider # Image repository name
-  tag: latest # Image tag
+  tag: 0.0.7 # Image tag
   pullPolicy: IfNotPresent # Pull policy: Always|IfNotPresent|Never
 
 # Infisical provider arguments
