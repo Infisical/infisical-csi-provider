@@ -13,6 +13,12 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts/token"]
     verbs: ["create"]
+  # Reading pod status is what bounds the read window: the start time and restart count of a pod's
+  # containers cannot be forged by the pod itself. Watched rather than fetched per mount, since the
+  # rotation reconciler calls the provider for every pod on every poll.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

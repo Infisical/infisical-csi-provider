@@ -62,3 +62,8 @@ nodeSelector:
 labels: {} # Additional labels for resources
 podLabels: {} # Additional labels for pods
 tolerations: [] # Pod tolerations for node taints
+
+# Bounding how long mounted secrets stay readable. Enabling this grants the provider read access to
+# pods, which is how it tells whether a pod has just started, so it is off unless asked for.
+readWindow:
+  enabled: false
