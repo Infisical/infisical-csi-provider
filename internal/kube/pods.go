@@ -63,7 +63,7 @@ func NewPods(ctx context.Context, clientset kubernetes.Interface, nodeName strin
 // to a request per mount would undo the point of the watch without saying so.
 func (p *Pods) Get(ctx context.Context, namespace, name, uid string) (*corev1.Pod, error) {
 	if p.lister == nil {
-		return p.fromApiServer(ctx, namespace, name)
+		return p.fromApiServer(ctx, namespace, name, uid)
 	}
 
 	pod, err := p.lister.Pods(namespace).Get(name)
@@ -73,9 +73,24 @@ func (p *Pods) Get(ctx context.Context, namespace, name, uid string) (*corev1.Po
 	if err == nil && (uid == "" || string(pod.UID) == uid) {
 		return pod, nil
 	}
-	return p.fromApiServer(ctx, namespace, name)
+	return p.fromApiServer(ctx, namespace, name, uid)
 }
 
-func (p *Pods) fromApiServer(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
-	return p.clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+// fromApiServer reads the pod live, and rejects a name that now resolves to a different incarnation.
+//
+// A name can be reused, so the pod the API server returns may be the replacement of the one the mount
+// was created for. Evaluating the window against the replacement's fresh start time would serve
+// secrets to a mount from a lifetime that has ended, so a UID mismatch is reported as not found and
+// the caller fails closed, exactly as it does for a pod that is simply gone. This mirrors the UID
+// check on the cache path; without it that guard is only as good as the teardown race that hides the
+// gap.
+func (p *Pods) fromApiServer(ctx context.Context, namespace, name, uid string) (*corev1.Pod, error) {
+	pod, err := p.clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if uid != "" && string(pod.UID) != uid {
+		return nil, apierrors.NewNotFound(corev1.Resource("pods"), name)
+	}
+	return pod, nil
 }

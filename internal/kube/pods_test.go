@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
@@ -45,6 +46,21 @@ func TestStaleCacheEntryFallsBackToTheApiServer(t *testing.T) {
 	}
 	if string(got.UID) != "new-uid" {
 		t.Fatalf("expected the fresh pod from the API server, got UID %q", got.UID)
+	}
+}
+
+// A mount request can overlap deletion and same-name recreation: the request still carries the old
+// UID while the cache and the API server have already moved to the replacement. Returning the
+// replacement would evaluate the window against its fresh start time and serve secrets to a mount from
+// an ended lifetime, so the fallback must reject a UID mismatch rather than trust the name.
+func TestApiServerFallbackRejectsAUidMismatch(t *testing.T) {
+	replacement := pod("new-uid", "now")
+
+	p := &Pods{clientset: fake.NewClientset(replacement), lister: listerHolding(t, replacement)}
+
+	_, err := p.Get(context.Background(), "ns", "a-pod", "old-uid")
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected a NotFound for the departed incarnation, got %v", err)
 	}
 }
 
