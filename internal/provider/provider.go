@@ -5,12 +5,21 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"sync"
 
 	infisical "github.com/infisical/go-sdk"
 	"github.com/infisical/infisical-csi-provider/internal/config"
 	"github.com/infisical/infisical-csi-provider/internal/window"
 	pb "sigs.k8s.io/secrets-store-csi-driver/provider/v1alpha1"
 )
+
+// rotationReminder logs the driver-rotation requirement once per process, the first time a read
+// window is evaluated. The window only ever closes when the driver re-invokes the provider, which it
+// does only with secret rotation enabled; without it Mount is called once at publish time, when the
+// window is always open, so the secret is served and never blanked. A MountRequest carries no signal
+// of the driver's rotation setting, so this is a reminder rather than a check: it keeps the feature
+// from silently doing nothing while an operator believes exposure is bounded.
+var rotationReminder sync.Once
 
 type Provider struct {
 	pods window.PodSource
@@ -30,6 +39,11 @@ func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*
 	// Outside its read window a pod is served empty files, and Infisical is not called at all: the
 	// secret never leaves the platform, rather than being fetched and then withheld.
 	if cfg.Parameters.WindowDuration > 0 {
+		rotationReminder.Do(func() {
+			log.Print("windowDuration is set: the read window only takes effect when the driver runs with " +
+				"--enable-secret-rotation=true and a short --rotation-poll-interval. Without rotation the provider " +
+				"is called once at mount time, the window never closes, and secrets stay readable for the pod's whole life.")
+		})
 		open, err := window.IsOpen(ctx, p.pods, window.Pod{
 			Namespace: cfg.Parameters.PodInfo.Namespace,
 			Name:      cfg.Parameters.PodInfo.Name,
