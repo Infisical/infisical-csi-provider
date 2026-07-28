@@ -67,3 +67,9 @@ tolerations: [] # Pod tolerations for node taints
 # pods, which is how it tells whether a pod has just started, so it is off unless asked for.
 readWindow:
   enabled: false
+
+# Annotations on the provider's ServiceAccount. With authMethod "aws", this is where an IRSA role goes,
+# which is narrower than relying on the node instance profile.
+#   eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
+serviceAccount:
+  annotations: {}
