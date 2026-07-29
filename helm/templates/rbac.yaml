@@ -23,6 +23,15 @@ rules:
 - apiGroups: [""]
   resources: ["serviceaccounts/token"]
   verbs: ["create"]
+{{- if .Values.readWindow.enabled }}
+# Reading pod status is what bounds the read window: the start time of a pod's containers cannot be
+# forged by the pod itself. Watched rather than fetched per mount, since the rotation reconciler calls
+# the provider for every pod on every poll. A field selector scopes the cache to one node, but RBAC
+# cannot express one, so the grant is cluster-wide and only made when the feature is on.
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

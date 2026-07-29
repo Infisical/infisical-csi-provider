@@ -13,9 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/infisical/infisical-csi-provider/internal/kube"
 	"github.com/infisical/infisical-csi-provider/internal/server"
 	"github.com/infisical/infisical-csi-provider/internal/version"
 	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	pb "sigs.k8s.io/secrets-store-csi-driver/provider/v1alpha1"
 )
 
@@ -42,8 +45,22 @@ func listenAndServe(gs *grpc.Server) error {
 	}
 	defer ln.Close()
 
+	// The watch lives as long as the listener does.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientset, err := inClusterClientset()
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// NODE_NAME scopes the pod watch to this node. Without it the informer caches every pod in the
+	// cluster, which a DaemonSet has no reason to do.
+	pods := kube.NewPods(ctx, clientset, os.Getenv("NODE_NAME"))
+
 	s := &server.Server{
 		HostUrl: *hostUrl,
+		Pods:    pods,
 	}
 
 	pb.RegisterCSIDriverProviderServer(gs, s)
@@ -138,4 +155,13 @@ func main() {
 		log.Printf("error running provider: %+v", err)
 		os.Exit(1)
 	}
+}
+
+// inClusterClientset builds the Kubernetes client used to evaluate read windows from pod status.
+func inClusterClientset() (kubernetes.Interface, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in-cluster config: %w", err)
+	}
+	return kubernetes.NewForConfig(config)
 }

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/secrets-store-csi-driver/pkg/util/fileutil"
 )
 
 type Config struct {
@@ -20,6 +21,10 @@ type Config struct {
 	TargetPath     string
 	FilePermission os.FileMode
 	HostUrl        string
+	// VolumeName is the CSI volume this mount publishes, recovered from TargetPath. The MountRequest
+	// carries no volume field, and the driver itself parses the path the same way to correlate a target
+	// path with a pod volume.
+	VolumeName string
 }
 
 type PodInfo struct {
@@ -41,6 +46,9 @@ type Parameters struct {
 	IdentityId         string
 	ProjectId          string
 	EnvSlug            string
+	// WindowDuration bounds how long after its containers start a pod is served its secrets. Zero, the
+	// default, serves them for the pod's whole life, which is the historical behaviour.
+	WindowDuration time.Duration
 }
 
 type Secret struct {
@@ -111,6 +119,16 @@ func parseParameters(ctx context.Context, parametersStr string) (Parameters, err
 	parameters.ProjectId = params["projectId"]
 	parameters.EnvSlug = params["envSlug"]
 
+	if raw := params["windowDuration"]; raw != "" {
+		parameters.WindowDuration, err = time.ParseDuration(raw)
+		if err != nil {
+			return Parameters{}, fmt.Errorf("invalid windowDuration %q: %w", raw, err)
+		}
+		if parameters.WindowDuration <= 0 {
+			return Parameters{}, fmt.Errorf("windowDuration must be positive, got %q", raw)
+		}
+	}
+
 	parameters.PodInfo.Name = params["csi.storage.k8s.io/pod.name"]
 	parameters.PodInfo.UID = types.UID(params["csi.storage.k8s.io/pod.uid"])
 	parameters.PodInfo.Namespace = params["csi.storage.k8s.io/pod.namespace"]
@@ -170,6 +188,8 @@ func Parse(ctx context.Context, parametersStr string, targetPath string, permiss
 	if err := json.Unmarshal([]byte(permissionStr), &config.FilePermission); err != nil {
 		return Config{}, err
 	}
+
+	config.VolumeName = fileutil.GetVolumeNameFromTargetPath(targetPath)
 
 	if config.Parameters.InfisicalUrl != "" {
 		config.HostUrl = config.Parameters.InfisicalUrl
