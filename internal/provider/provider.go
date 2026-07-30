@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	infisical "github.com/infisical/go-sdk"
+	"github.com/infisical/go-sdk/packages/models"
 	"github.com/infisical/infisical-csi-provider/internal/config"
 	"github.com/infisical/infisical-csi-provider/internal/window"
 	pb "sigs.k8s.io/secrets-store-csi-driver/provider/v1alpha1"
@@ -27,12 +28,6 @@ type Provider struct {
 
 func NewProvider(pods window.PodSource) *Provider {
 	return &Provider{pods: pods}
-}
-
-type secretItem struct {
-	FileName string
-	Value    string
-	Version  string
 }
 
 func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*pb.MountResponse, error) {
@@ -75,40 +70,61 @@ func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*
 		return nil, fmt.Errorf("unable to login with Kubernetes auth [err=%s]", err)
 	}
 
-	secretMap := make(map[string]*secretItem)
+	return secretsResponse(infisicalClient.Secrets(), cfg)
+}
+
+// secretsResponse resolves every configured secret with one List per distinct secretPath, rather
+// than one Retrieve per key.
+//
+// With rotation enabled the driver re-invokes the provider on every poll, so a mount that configures
+// many keys from one folder pays the per-key cost repeatedly, and once per pod.
+func secretsResponse(client infisical.SecretsInterface, cfg config.Config) (*pb.MountResponse, error) {
+	byPath := make(map[string]map[string]models.Secret)
 	for _, secret := range cfg.Parameters.Secrets {
-		sec, err := infisicalClient.Secrets().Retrieve(infisical.RetrieveSecretOptions{
-			SecretKey:      secret.SecretKey,
+		if _, done := byPath[secret.SecretPath]; done {
+			continue
+		}
+
+		// AttachToProcessEnv is left off: it would export every value into the provider's own
+		// environment, where it would outlive the mount.
+		listed, err := client.List(infisical.ListSecretsOptions{
 			ProjectID:      cfg.Parameters.ProjectId,
 			Environment:    cfg.Parameters.EnvSlug,
 			SecretPath:     secret.SecretPath,
 			IncludeImports: true,
 		})
-
 		if err != nil {
 			return nil, err
 		}
 
-		secretMap[sec.ID] = &secretItem{
-			FileName: secret.FileName,
-			Value:    sec.SecretValue,
-			Version:  fmt.Sprintf("%s-%s-%s-%s", sec.ID, sec.SecretPath, sec.SecretKey, strconv.Itoa(sec.Version)),
+		keys := make(map[string]models.Secret, len(listed))
+		for _, sec := range listed {
+			keys[sec.SecretKey] = sec
 		}
+		byPath[secret.SecretPath] = keys
 	}
 
-	var files []*pb.File
-	var ov []*pb.ObjectVersion
+	files := make([]*pb.File, 0, len(cfg.Parameters.Secrets))
+	ov := make([]*pb.ObjectVersion, 0, len(cfg.Parameters.Secrets))
+	for _, secret := range cfg.Parameters.Secrets {
+		// Retrieve failed the mount on a key that does not exist, and a listing has to keep doing that
+		// explicitly, so a typo in a SecretProviderClass cannot become a silently absent file.
+		sec, found := byPath[secret.SecretPath][secret.SecretKey]
+		if !found {
+			return nil, fmt.Errorf("secret %q not found at path %q", secret.SecretKey, secret.SecretPath)
+		}
 
-	for _, value := range secretMap {
-		files = append(files, &pb.File{Path: value.FileName, Mode: int32(cfg.FilePermission), Contents: []byte(value.Value)})
-		ov = append(ov, &pb.ObjectVersion{Id: value.FileName, Version: value.Version})
-		log.Printf("secret added to mount response, directory: %v, file: %v", cfg.TargetPath, value.FileName)
+		files = append(files, &pb.File{Path: secret.FileName, Mode: int32(cfg.FilePermission), Contents: []byte(sec.SecretValue)})
+		// The path comes from the request: a listing does not carry one per secret. Same fields as
+		// before, so an upgrade does not look like a rotation to the driver.
+		ov = append(ov, &pb.ObjectVersion{
+			Id:      secret.FileName,
+			Version: fmt.Sprintf("%s-%s-%s-%s", sec.ID, secret.SecretPath, sec.SecretKey, strconv.Itoa(sec.Version)),
+		})
+		log.Printf("secret added to mount response, directory: %v, file: %v", cfg.TargetPath, secret.FileName)
 	}
 
-	return &pb.MountResponse{
-		ObjectVersion: ov,
-		Files:         files,
-	}, nil
+	return &pb.MountResponse{ObjectVersion: ov, Files: files}, nil
 }
 
 // closedVersion is reported for every file while the window is shut. It is deliberately constant: the
