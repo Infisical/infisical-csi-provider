@@ -70,9 +70,25 @@ func (p *Provider) HandleMountRequest(ctx context.Context, cfg config.Config) (*
 		CaCertificate: cfg.Parameters.CaCertificate,
 	})
 
-	_, err := infisicalClient.Auth().KubernetesRawServiceAccountTokenLogin(cfg.Parameters.IdentityId, cfg.Parameters.PodInfo.ServiceAccountToken)
+	// AWS auth signs an sts:GetCallerIdentity with the provider's own ambient credentials, so it works
+	// on clusters whose API server Infisical cannot reach. Kubernetes auth needs Infisical to call
+	// TokenReview, which a private API endpoint rules out.
+	//
+	// Every method is named rather than folded into a default, so adding one to the values config
+	// accepts without handling it here fails as an unsupported method instead of silently attempting a
+	// Kubernetes login with no token.
+	var err error
+	switch cfg.Parameters.AuthMethod {
+	case config.AuthAws:
+		_, err = infisicalClient.Auth().AwsIamAuthLogin(cfg.Parameters.IdentityId)
+	case config.AuthKubernetes:
+		_, err = infisicalClient.Auth().KubernetesRawServiceAccountTokenLogin(
+			cfg.Parameters.IdentityId, cfg.Parameters.PodInfo.ServiceAccountToken)
+	default:
+		return nil, fmt.Errorf("unsupported auth method %q", cfg.Parameters.AuthMethod)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("unable to login with Kubernetes auth [err=%s]", err)
+		return nil, fmt.Errorf("unable to login with %s auth [err=%s]", cfg.Parameters.AuthMethod, err)
 	}
 
 	secretMap := make(map[string]*secretItem)

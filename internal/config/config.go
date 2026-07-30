@@ -16,6 +16,13 @@ import (
 	"sigs.k8s.io/secrets-store-csi-driver/pkg/util/fileutil"
 )
 
+// Auth methods the provider supports. Shared with the login switch so the accepted values and the
+// handled ones cannot drift apart.
+const (
+	AuthKubernetes = "kubernetes"
+	AuthAws        = "aws"
+)
+
 type Config struct {
 	Parameters     Parameters
 	TargetPath     string
@@ -101,9 +108,12 @@ func parseParameters(ctx context.Context, parametersStr string) (Parameters, err
 
 	parameters.AuthMethod = params["authMethod"]
 
-	// for now, only kubernetes auth is supported
-	if parameters.AuthMethod != "kubernetes" {
-		return Parameters{}, fmt.Errorf("invalid value for auth method - valid option is kubernetes")
+	if parameters.AuthMethod == "" {
+		parameters.AuthMethod = AuthKubernetes
+	}
+	if parameters.AuthMethod != AuthKubernetes && parameters.AuthMethod != AuthAws {
+		return Parameters{}, fmt.Errorf("invalid value for auth method - valid options are %s and %s",
+			AuthKubernetes, AuthAws)
 	}
 
 	parameters.Audience = params["audience"]
@@ -134,32 +144,14 @@ func parseParameters(ctx context.Context, parametersStr string) (Parameters, err
 	parameters.PodInfo.Namespace = params["csi.storage.k8s.io/pod.namespace"]
 	parameters.PodInfo.ServiceAccountName = params["csi.storage.k8s.io/serviceAccount.name"]
 
-	tokensJSON := params["csi.storage.k8s.io/serviceAccount.tokens"]
-	if tokensJSON != "" && !parameters.UseDefaultAudience {
-		// The csi.storage.k8s.io/serviceAccount.tokens field is a JSON object
-		// marshalled into a string. The object keys are audience name (string)
-		// and the values are embedded objects with "token" property
-		var tokens map[string]struct {
-			Token string `json:"token"`
-		}
-		if err := json.Unmarshal([]byte(tokensJSON), &tokens); err != nil {
-			return Parameters{}, fmt.Errorf("failed to unmarshal service account tokens: %w", err)
-		}
-
-		if token, ok := tokens[parameters.Audience]; ok {
-			parameters.PodInfo.ServiceAccountToken = token.Token
-		}
-	}
-
-	if parameters.UseDefaultAudience {
-		parameters.PodInfo.ServiceAccountToken, err = createJWTTokenWithDefaultAudience(ctx, parameters)
+	// Only kubernetes auth logs in with the pod's token; AWS auth signs with the provider's own
+	// ambient credentials.
+	if parameters.AuthMethod == AuthKubernetes {
+		parameters.PodInfo.ServiceAccountToken, err = serviceAccountToken(
+			ctx, parameters, params["csi.storage.k8s.io/serviceAccount.tokens"])
 		if err != nil {
 			return Parameters{}, err
 		}
-	}
-
-	if parameters.PodInfo.ServiceAccountToken == "" {
-		return Parameters{}, fmt.Errorf("no service account token received")
 	}
 
 	secretsYaml := params["secrets"]
@@ -225,4 +217,29 @@ func (cfg *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// serviceAccountToken returns the pod token that kubernetes auth logs in with, either minted with the
+// default audience or taken from the tokens the driver passed for ours.
+func serviceAccountToken(ctx context.Context, parameters Parameters, tokensJSON string) (string, error) {
+	if parameters.UseDefaultAudience {
+		return createJWTTokenWithDefaultAudience(ctx, parameters)
+	}
+
+	// The csi.storage.k8s.io/serviceAccount.tokens field is a JSON object marshalled into a string. The
+	// object keys are audience name (string) and the values are embedded objects with a "token" property.
+	var tokens map[string]struct {
+		Token string `json:"token"`
+	}
+	if tokensJSON != "" {
+		if err := json.Unmarshal([]byte(tokensJSON), &tokens); err != nil {
+			return "", fmt.Errorf("failed to unmarshal service account tokens: %w", err)
+		}
+	}
+
+	token := tokens[parameters.Audience].Token
+	if token == "" {
+		return "", fmt.Errorf("no service account token received")
+	}
+	return token, nil
 }
