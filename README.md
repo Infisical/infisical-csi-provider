@@ -19,6 +19,16 @@ helm repo update
 helm install infisical-csi-provider infisical-helm-charts/infisical-csi-provider
 ```
 
+From v0.0.10 the provider offers a post-quantum key exchange and no longer accepts 3DES or RSA keys
+under 1024 bits. If a proxy or server in front of Infisical cannot handle one of these, set `GODEBUG`
+through `extraEnv`: `tlsmlkem=0` turns off the post-quantum key exchange, and `tls3des=1` and
+`rsa1024min=0` restore the other two, comma-separated in the same value.
+
+```bash
+helm upgrade --install infisical-csi-provider infisical-helm-charts/infisical-csi-provider \
+  --set 'extraEnv[0].name=GODEBUG' --set 'extraEnv[0].value=tlsmlkem=0'
+```
+
 ### Using yaml
 
 You can also install using the deployment config in the `deployment` folder:
