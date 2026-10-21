@@ -37,14 +37,19 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-{{- if .Values.readWindow.enabled }}
+{{- if or .Values.readWindow.enabled .Values.extraEnv }}
           env:
+{{- if .Values.readWindow.enabled }}
             # Scopes the pod watch to this node. Without it the provider reads pods from the API server
             # on every mount instead.
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+{{- end }}
+{{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+{{- end }}
 {{- end }}
           volumeMounts:
             - name: providervol
